@@ -131,7 +131,8 @@ class NoTimeEmbedding(nn.Module):
 
     def forward(self, x):
         batch_size, seq_len, time_featue = x.shape
-        zero = torch.zeros(batch_size, seq_len, self.d_model)
+        # 这里因为不是葱x继承过来的，所以需要cuda
+        zero = torch.zeros(batch_size, seq_len, self.d_model).cuda()
         return zero
 
 class DataEmbedding(nn.Module):
@@ -143,12 +144,12 @@ class DataEmbedding(nn.Module):
         # fixed执行的是temporalEmbedding，而time feature执行的是相当于对年月日进行了编码这个就不仔细研究了
         #self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq) if embed_type!='timeF' else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
 
-        if embed_type != 'timeF':
-            self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+        if embed_type == 'timeF':
+            self.temporal_embedding = TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
         elif embed_type == 'none':
             self.temporal_embedding = NoTimeEmbedding(d_model=d_model)
         else:
-            self.temporal_embedding = TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+            self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
 
         self.dropout = nn.Dropout(p=dropout)
 
