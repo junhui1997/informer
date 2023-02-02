@@ -1,5 +1,9 @@
 import torch
 
+"""
+dig = 1的时候对角线为0，之后数值每往负方向走一些数值为0的三角形大小就会变小
+由triu可以看到，所有的query>=key，也就是未来的部分都被设为了0，避免了信息泄漏
+"""
 class TriangularCausalMask():
     def __init__(self, B, L, device="cpu"):
         mask_shape = [B, 1, L, L]

@@ -2,24 +2,35 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+"""
+    卷积操作同样执行了一个conv,norm，activation
+    input:[batch_size,seq_len,d_model]
+    return:[batch_size,seq_len/2,d_model]
+"""
 class ConvLayer(nn.Module):
     def __init__(self, c_in):
         super(ConvLayer, self).__init__()
+        # 这里应该是由于api版本的不同，想要维持卷积完后的形状不同需要进行的操作
         padding = 1 if torch.__version__>='1.5.0' else 2
+        # 保持channel的维度不变,此时的cin是d_model
         self.downConv = nn.Conv1d(in_channels=c_in,
                                   out_channels=c_in,
                                   kernel_size=3,
                                   padding=padding,
                                   padding_mode='circular')
         self.norm = nn.BatchNorm1d(c_in)
+        # 和relu有细微差别
         self.activation = nn.ELU()
+        # kernel_size 3和padding = 1抵消掉了，剩下是stride=2导致经过这一步之后尺寸减半
         self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
+        # 这一步同样是为了对d_model进行卷积
         x = self.downConv(x.permute(0, 2, 1))
         x = self.norm(x)
         x = self.activation(x)
         x = self.maxPool(x)
+        # 交换回来第一步卷积交换过去的数值
         x = x.transpose(1,2)
         return x
 
@@ -52,10 +63,18 @@ class EncoderLayer(nn.Module):
         y = self.dropout(self.conv2(y).transpose(-1,1))
 
         return self.norm2(x+y), attn
-
+"""
+    input x: batch_size,seq_len,d_model
+    return： x
+    这个类实例化时候传入了三个list，之后是再放入modulelist中去实现历遍
+    实现的顺序是 attention-conv-attention-norm，当然中间也可以再插入点conv-attention块，需要注意的是attention块最后是和layer norm相连接
+    如果没有卷积的话就是attention-attention-layer norm
+    在每一层的attention里面收集都需要收集attn
+    """
 class Encoder(nn.Module):
     def __init__(self, attn_layers, conv_layers=None, norm_layer=None):
         super(Encoder, self).__init__()
+        # 从之前的地方也可以读出来，conv层是可能会不存在的
         self.attn_layers = nn.ModuleList(attn_layers)
         self.conv_layers = nn.ModuleList(conv_layers) if conv_layers is not None else None
         self.norm = norm_layer

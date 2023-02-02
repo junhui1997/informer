@@ -111,6 +111,7 @@ class Exp_Informer(Exp_Basic):
         return criterion
 
     def vali(self, vali_data, vali_loader, criterion):
+        #首先设置的是eval模式
         self.model.eval()
         total_loss = []
         for i, (batch_x,batch_y,batch_x_mark,batch_y_mark) in enumerate(vali_loader):
@@ -150,16 +151,20 @@ class Exp_Informer(Exp_Basic):
             epoch_time = time.time()
             for i, (batch_x,batch_y,batch_x_mark,batch_y_mark) in enumerate(train_loader):
                 iter_count += 1
-                
+
+                # 需要每一个batch时候zero_grad！
                 model_optim.zero_grad()
                 pred, true = self._process_one_batch(
                     train_data, batch_x, batch_y, batch_x_mark, batch_y_mark)
                 loss = criterion(pred, true)
                 train_loss.append(loss.item())
-                
+
+                # 每100个iter重新更新一次预估时间
                 if (i+1) % 100==0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                    # 从开始到现在的时间/经历了多少iteration
                     speed = (time.time()-time_now)/iter_count
+                    # train_step反映了一个epoch有多少个iter
                     left_time = speed*((self.args.train_epochs - epoch)*train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
@@ -186,7 +191,8 @@ class Exp_Informer(Exp_Basic):
                 break
 
             adjust_learning_rate(model_optim, epoch+1, self.args)
-            
+
+        # 最后时候给加载上去
         best_model_path = path+'/'+'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
         
@@ -227,6 +233,9 @@ class Exp_Informer(Exp_Basic):
 
         return
 
+    #predict下面可以看到是对整个的dataloader进行了历遍，所以predict函数只调用一次，
+    #对整个xx数据集进行了预测，同时将结果储存了下来，保存为了npy，注意其中的子处理函数是process_one_batch
+    #之后将每一个batch的数据相加了起来
     def predict(self, setting, load=False):
         pred_data, pred_loader = self._get_data(flag='pred')
         
@@ -245,6 +254,7 @@ class Exp_Informer(Exp_Basic):
             preds.append(pred.detach().cpu().numpy())
 
         preds = np.array(preds)
+        #交换了后两个维度顺序，现在是(batch_size, feature, pred_len)
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         
         # result save
@@ -256,6 +266,7 @@ class Exp_Informer(Exp_Basic):
         
         return
 
+    # 相当于是把label中需要predict的部分给遮掩掉了（记为0,结构相当于label_len+00000,0的长度为predict的长度），然后放入decoder中去得到一个output，此时output的长度也是（label_len+pred_len)
     def _process_one_batch(self, dataset_object, batch_x, batch_y, batch_x_mark, batch_y_mark):
         #已知batch代表的是真实的数值
         batch_x = batch_x.float().to(self.device)
@@ -278,15 +289,18 @@ class Exp_Informer(Exp_Basic):
             with torch.cuda.amp.autocast():
                 #输出注意力机制
                 if self.args.output_attention:
+                    #预测的时候同样给输入进去即可，注意timestamp_y也是直接输入进去即可
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
         else:
+            #如果使用了输出注意力机制的话，那么输出的结果会比较多这样的话需要选择第一个即可
             if self.args.output_attention:
                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
             else:
                 outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
         if self.args.inverse:
+            # 使用了dataset中的fit的数值
             outputs = dataset_object.inverse_transform(outputs)
         #f_dim = -1时候代表的是只取最后一位，对应的是单变量输出，如果是0的时候代表的是多变量输出，因为s时候输入变量也是1，所以没有啥区别，对于MS时候是多对单所以是-1
         f_dim = -1 if self.args.features=='MS' else 0

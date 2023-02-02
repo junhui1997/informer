@@ -65,7 +65,7 @@ class Dataset_ETT_hour(Dataset):
         if self.scale:
             # 划定了train data的范围
             # 利用scaler来正则化数据，注意这里使用的是fit
-            # 之后利用transform来生成data，注意fit时候是使用的整个train_data，而生成的数据是对整个df，这个符合我们正常的理解：
+            # 之后利用transform来生成data，注意fit时候是使用的整个train_data，而生成的数据是对整个df，这个符合我们正常的理解，注意这里是borders  ：
             # 因为我们训练时候只能观测到train部分的数据，所以正则化是基于train来做的，然后应用到整个数据中去
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)

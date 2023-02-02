@@ -8,6 +8,11 @@ from models.decoder import Decoder, DecoderLayer
 from models.attn import FullAttention, ProbAttention, AttentionLayer
 from models.embed import DataEmbedding
 
+
+"""
+    这里c_out决定了输出是多少
+    这里我理解的是，如果是MS的话是所有的来去预测OT这项指标，不然的话就是多对多分别去预测
+"""
 class Informer(nn.Module):
     def __init__(self, enc_in, dec_in, c_out, seq_len, label_len, out_len, 
                 factor=5, d_model=512, n_heads=8, e_layers=3, d_layers=2, d_ff=512, 
@@ -16,7 +21,9 @@ class Informer(nn.Module):
                 device=torch.device('cuda:0')):
         super(Informer, self).__init__()
         self.pred_len = out_len
+        # attn这里是选择不同的attention，一共有两种一种是普通的attention一种是prob attention
         self.attn = attn
+        # 是否输出encoder的注意力
         self.output_attention = output_attention
 
         # Encoding
@@ -24,7 +31,12 @@ class Informer(nn.Module):
         self.dec_embedding = DataEmbedding(dec_in, d_model, embed, freq, dropout)
         # Attention
         Attn = ProbAttention if attn=='prob' else FullAttention
-        # Encoder
+        # Encoder ，distil true的时候才有卷积,传入是三个list
+        # encoder的结构是encoder layer，conv layer，之后是layer norm
+        # 卷积层数目比encoder数目少一
+        # 每次执行conv时候seq_len减半
+        # attention_layer的四个输入attention,d_model,n_head,mix
+        # attention块的输入
         self.encoder = Encoder(
             [
                 EncoderLayer(
@@ -62,6 +74,7 @@ class Informer(nn.Module):
         )
         # self.end_conv1 = nn.Conv1d(in_channels=label_len+out_len, out_channels=out_len, kernel_size=1, bias=True)
         # self.end_conv2 = nn.Conv1d(in_channels=d_model, out_channels=c_out, kernel_size=1, bias=True)
+        # 最后通过nn.linear输出成想要的形状
         self.projection = nn.Linear(d_model, c_out, bias=True)
         
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, 
